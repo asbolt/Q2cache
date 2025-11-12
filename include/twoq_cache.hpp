@@ -21,14 +21,8 @@ public:
     TwoQCache(size_t capacity) : capacity_(capacity), A1_capacity_(capacity / 4) {}
 
     void put(const KeyT& key, const T& value) {
-        T temp;
-        if (get(key, temp)) {
-            Am.front().second = value;
-            return;
-        }
-
-        if (A1_in.size() >= A1_capacity_) {
-            evict_from_cold();
+        if (size() >= capacity_) {
+            evict();
         }
 
         A1_in.push_back({key, value});
@@ -36,27 +30,17 @@ public:
     }
 
     bool get(const KeyT& key, T& value) {
-        auto it_am = Am_hash.find(key);
-        if (it_am != Am_hash.end()) {
-            value = it_am->second->second;
-            Am.splice(Am.begin(), Am, it_am->second);
+        auto it = Am_hash.find(key);
+        if (it != Am_hash.end()) {
+            value = it->second->second;
+            Am.splice(Am.begin(), Am, it->second); 
             return true;
         }
 
-        auto it_a1 = A1_in_hash.find(key);
-        if (it_a1 != A1_in_hash.end()) {
-            value = it_a1->second->second;
-
-            A1_in.erase(it_a1->second);
-            A1_in_hash.erase(key);
-
-            if (Am.size() >= capacity_ - A1_capacity_) {
-                evict_from_hot();
-            }
-
-            Am.push_front({key, value});
-            Am_hash[key] = Am.begin();
-
+        it = A1_in_hash.find(key);
+        if (it != A1_in_hash.end()) {
+            value = it->second->second;
+            promote_from_A1_to_Am(key, value);
             return true;
         }
 
@@ -94,20 +78,27 @@ public:
     }
 
 private:
-    void evict_from_cold() {
-        if (!A1_in.empty()) {
-            KeyT old_key = A1_in.front().first;
-            A1_in_hash.erase(old_key);
-            A1_in.pop_front();
+    void promote_from_A1_to_Am(const KeyT& key, const T& value) {
+        auto it = A1_in_hash.find(key);
+        if (it != A1_in_hash.end()) {
+            A1_in.erase(it->second);
+            A1_in_hash.erase(key);
         }
-    }
 
-    void evict_from_hot() {
-        if (!Am.empty()) {
+        if (Am.size() >= capacity_ - A1_capacity_) {
             KeyT old_key = Am.back().first;
             Am_hash.erase(old_key);
             Am.pop_back();
         }
+
+        Am.push_front({key, value});
+        Am_hash[key] = Am.begin();
+    }
+
+    void evict() {
+        KeyT old_key = A1_in.front().first;
+        A1_in_hash.erase(old_key);
+        A1_in.pop_front();
     }
 };
 
