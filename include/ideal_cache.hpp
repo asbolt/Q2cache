@@ -6,46 +6,59 @@
 
 template <typename KeyT>
 int ideal_cache_hits(size_t cache_size, const std::vector<KeyT>& requests) {
+    
     std::unordered_set<KeyT> cache;
     int hits = 0;
-
+    
+    std::unordered_map<KeyT, std::vector<size_t>> occurrences;
+    for (size_t i = 0; i < requests.size(); ++i) {
+        occurrences[requests[i]].push_back(i);
+    }
+    
+    std::unordered_map<KeyT, size_t> ptr;
+    for (auto& p : occurrences) {
+        ptr[p.first] = 0;
+    }
+    
     for (size_t i = 0; i < requests.size(); ++i) {
         KeyT key = requests[i];
         
-        if (cache.find(key) != cache.end()) {
+        if (ptr[key] < occurrences[key].size() && occurrences[key][ptr[key]] == i) {
+            ptr[key]++;
+        }
+        
+        if (cache.count(key)) {
             hits++;
             continue;
         }
         
-        if (cache.size() == cache_size) {
-            KeyT to_remove;
-            size_t farthest_use = 0;
-            bool found_unused = false;
-            
-            for (KeyT cached_key : cache) {
-                size_t next_use = requests.size();
-                for (size_t j = i + 1; j < requests.size(); ++j) {
-                    if (requests[j] == cached_key) {
-                        next_use = j;
-                        break;
-                    }
-                }
-                
-                if (next_use == requests.size()) {
-                    to_remove = cached_key;
-                    found_unused = true;
-                    break;
-                }
-                
-                if (next_use > farthest_use) {
-                    farthest_use = next_use;
-                    to_remove = cached_key;
-                }
-            }
-            
-            cache.erase(to_remove);
+        if (ptr[key] == occurrences[key].size()) {
+            continue;
         }
         
+        if (cache.size() < cache_size) {
+            cache.insert(key);
+            continue;
+        }
+        
+        KeyT to_remove;
+        size_t farthest_use = 0;
+        bool found_unused = false;
+        
+        for (const KeyT& k : cache) {
+            if (ptr[k] == occurrences[k].size()) {
+                to_remove = k;
+                found_unused = true;
+                break;
+            }
+            size_t next_use = occurrences[k][ptr[k]];
+            if (next_use > farthest_use) {
+                farthest_use = next_use;
+                to_remove = k;
+            }
+        }
+        
+        cache.erase(to_remove);
         cache.insert(key);
     }
     

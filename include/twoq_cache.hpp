@@ -18,7 +18,7 @@ private:
     std::unordered_map<KeyT, ListIt> Am_hash;
 
 public:
-    TwoQCache(size_t capacity) : capacity_(capacity), A1_capacity_(capacity <= 4 ? 1 : capacity / 4) {}
+    TwoQCache(size_t capacity) : capacity_(capacity), A1_capacity_(capacity / 4) {}
 
     void put(const KeyT& key, const T& value) {
         T temp;
@@ -27,7 +27,7 @@ public:
             return;
         }
 
-        if (size() >= capacity_) {
+        if (A1_in.size() >= A1_capacity_) {
             evict_from_cold();
         }
 
