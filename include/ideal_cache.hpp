@@ -1,68 +1,127 @@
 #ifndef IDEAL_CACHE_HPP
 #define IDEAL_CACHE_HPP
 
+#include <list>
+#include <deque>
+#include <unordered_map>
 #include <vector>
-#include <unordered_set>
 
-template <typename KeyT>
-int ideal_cache_hits(size_t cache_size, const std::vector<KeyT>& requests) {
+template <typename T, typename KeyT = int> 
+class IdealCache {
+private:
+    size_t capacity_;      
     
-    std::unordered_set<KeyT> cache;
-    int hits = 0;
+    std::list<std::pair<KeyT, T>> cache_;    
     
-    std::unordered_map<KeyT, std::vector<size_t>> occurrences;
-    for (size_t i = 0; i < requests.size(); ++i) {
-        occurrences[requests[i]].push_back(i);
+    using ListIt = typename std::list<std::pair<KeyT, T>>::iterator;
+    std::unordered_map<KeyT, ListIt> hash_;
+
+    std::unordered_map<KeyT, std::deque<size_t>> requests_;
+
+public:
+    IdealCache(size_t capacity, std::vector<KeyT> requests) : capacity_(capacity) {
+        for (size_t i = 0; i < requests.size(); i++)
+        {
+            requests_[requests[i]].push_back(i);
+        }
     }
-    
-    std::unordered_map<KeyT, size_t> ptr;
-    for (auto& p : occurrences) {
-        ptr[p.first] = 0;
+
+    void put(const KeyT& key, const T& value) {
+        auto it = requests_.find(key);
+        if (it == requests_.end())
+            return;
+
+        auto cache_it = hash_.find(key);
+        if (cache_it != hash_.end()) {
+            cache_it->second->second = value;
+            return;
+        }
+
+        if (cache_.size() == capacity_)
+        {
+            if (!erase(key))
+                return;
+        }
+
+        cache_.push_back({key, value});
+        hash_[key] = --cache_.end();
     }
-    
-    for (size_t i = 0; i < requests.size(); ++i) {
-        KeyT key = requests[i];
+
+    bool get(const KeyT& key, T& value) {
+        requests_[key].pop_front();
+        if (requests_[key].empty())
+            requests_.erase(key);
+
+        auto it = hash_.find(key);
+        if (it != hash_.end()) {
+            value = it->second->second;
+            return true;
+        }
+
+        return false;
+    }
+
+    size_t size() const {
+        return cache_.size();
+    }
+
+    size_t capacity() const {
+        return capacity_;
+    }
+
+    bool contains(const KeyT& key) const {
+        return hash_.find(key) != hash_.end();
+    }
+
+    bool empty() const {
+        return cache_.empty();
+    }
+
+    template <typename F>
+    bool look_update(const KeyT& key, F slow_get_page) {
+        T value;
         
-        if (ptr[key] < occurrences[key].size() && occurrences[key][ptr[key]] == i) {
-            ptr[key]++;
+        if (get(key, value)) {
+            return true;
         }
         
-        if (cache.count(key)) {
-            hits++;
-            continue;
-        }
-        
-        if (ptr[key] == occurrences[key].size()) {
-            continue;
-        }
-        
-        if (cache.size() < cache_size) {
-            cache.insert(key);
-            continue;
-        }
-        
-        KeyT to_remove;
-        size_t farthest_use = 0;
-        bool found_unused = false;
-        
-        for (const KeyT& k : cache) {
-            if (ptr[k] == occurrences[k].size()) {
-                to_remove = k;
-                found_unused = true;
+        value = slow_get_page(key);
+        put(key, value);
+        return false; 
+    }
+
+private:
+    bool erase (const KeyT& key)
+    {
+        KeyT key_to_remove = cache_.begin()->first;
+        bool find_to_remove = false;
+        size_t remove_position = requests_[key].front();
+
+        for (auto& pair : cache_)
+        {
+            KeyT cur_key = pair.first;
+            if (requests_[cur_key].empty())
+            {
+                key_to_remove = cur_key;
+                find_to_remove = true;
                 break;
             }
-            size_t next_use = occurrences[k][ptr[k]];
-            if (next_use > farthest_use) {
-                farthest_use = next_use;
-                to_remove = k;
+            size_t position = requests_[cur_key].front();
+            if (position > remove_position)
+            {
+                key_to_remove = cur_key;
+                remove_position = position;
+                find_to_remove = true;
             }
         }
-        
-        cache.erase(to_remove);
-        cache.insert(key);
+        if (!find_to_remove)
+            return false;
+
+        auto to_remove = hash_.find(key_to_remove);
+        cache_.erase(to_remove->second);
+        hash_.erase(key_to_remove);
+        return true;
     }
-    
-    return hits;
-}
+};
 
 #endif

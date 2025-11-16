@@ -14,15 +14,19 @@ int main() {
     }
     
     TwoQCache<int> twoq_cache(cache_size);
+    IdealCache<int> ideal_cache(cache_size, requests);
     int twoq_hits = 0;
+    int ideal_hits = 0;
     
     for (int page : requests) {
         if (twoq_cache.look_update(page, [](int key) { return key; })) {
             twoq_hits++;
         }
+
+        if (ideal_cache.look_update(page, [](int key) { return key; })) {
+            ideal_hits++;
+        }
     }
-    
-    int ideal_hits = ideal_cache_hits(cache_size, requests);
     
     std::cout << "2Q кеш: " << twoq_hits << " попаданий" << std::endl;
     std::cout << "Идеальный кеш: " << ideal_hits << " попаданий" << std::endl;
